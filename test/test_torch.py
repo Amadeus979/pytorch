@@ -8543,6 +8543,153 @@ tensor([[[1.+1.j, 1.+1.j, 1.+1.j,  ..., 1.+1.j, 1.+1.j, 1.+1.j],
         del z  # it's dead again
         self.assertEqual(type(y.grad), MyTensor)
 
+    def test_storage_dealloc(self):
+        m, t = Tracker.make()
+        s0 = torch.UntypedStorage(10)
+        s1 = s0
+        s0.__dict__['tmp'] = t
+        del t
+
+        self.assertFalse(m[0])
+        del s0
+        self.assertFalse(m[0])
+        del s1
+        self.assertTrue(m[0])
+
+    def test_storage_from_tensor_dealloc(self):
+        m, t = Tracker.make()
+        a = torch.randn(10)
+        s0 = a.untyped_storage()
+        s0.__dict__['tmp'] = t
+        del t
+
+        s1 = a.untyped_storage()
+        self.assertTrue(s0 is s1)
+        self.assertTrue(hasattr(s1, 'tmp'))
+
+        del a
+
+        self.assertFalse(m[0])
+        del s0
+        self.assertFalse(m[0])
+        del s1
+        self.assertTrue(m[0])
+
+    def test_storage_from_tensor_dealloc_zombie(self):
+        m, t = Tracker.make()
+        a = torch.randn(10)
+        s0 = a.untyped_storage()
+        s0.__dict__['tmp'] = t
+        del t
+
+        s1 = a.untyped_storage()
+        self.assertTrue(s0 is s1)
+        self.assertTrue(hasattr(s1, 'tmp'))
+
+        self.assertFalse(m[0])
+        del s0
+        self.assertFalse(m[0])
+        del s1
+        self.assertFalse(m[0])
+        del a
+        self.assertTrue(m[0])
+
+    def test_storage_from_tensor_dealloc_resurrected(self):
+        m, t = Tracker.make()
+        a = torch.randn(10)
+        s0 = a.untyped_storage()
+        s0.__dict__['tmp'] = t
+        del t
+
+        s1 = a.untyped_storage()
+        self.assertTrue(s0 is s1)
+        self.assertTrue(hasattr(s1, 'tmp'))
+
+        self.assertFalse(m[0])
+        del s0
+        self.assertFalse(m[0])
+        del s1
+        self.assertFalse(m[0])
+
+        s0 = a.untyped_storage()
+        self.assertTrue(isinstance(s0, torch.UntypedStorage))
+
+        del a
+        self.assertFalse(m[0])
+        del s0
+        self.assertTrue(m[0])
+
+    def test_storage_dealloc_resurrected(self):
+        m, t = Tracker.make()
+        s = torch.UntypedStorage(10)
+        s.__dict__['tmp'] = t
+        del t
+
+        a = torch.tensor(s)
+        self.assertFalse(m[0])
+        del s
+
+        self.assertFalse(m[0])
+
+        s = a.untyped_storage()
+        self.assertTrue(isinstance(s, torch.UntypedStorage))
+
+        del a
+        self.assertFalse(m[0])
+        del s
+        self.assertTrue(m[0])
+
+    def test_storage_dealloc_subclass_zombie(self):
+        class MyStorage(torch.UntypedStorage):
+            finalized_count = 0
+
+            def __del__(self):
+                MyStorage.finalized_count += 1
+
+        m, t = Tracker.make()
+        s = MyStorage(10)
+        s.__dict__['tmp'] = t
+        del t
+
+        a = torch.tensor(s)
+        self.assertFalse(m[0])
+        del s
+
+        self.assertEqual(MyStorage.finalized_count, 0)
+        self.assertFalse(m[0])
+
+        del a
+        self.assertEqual(MyStorage.finalized_count, 1)
+        self.assertTrue(m[0])
+
+    def test_storage_dealloc_subclass_resurrected(self):
+        class MyStorage(torch.UntypedStorage):
+            finalized_count = 0
+
+            def __del__(self):
+                MyStorage.finalized_count += 1
+
+        m, t = Tracker.make()
+        s = MyStorage(10)
+        s.__dict__['tmp'] = t
+        del t
+
+        a = torch.tensor(s)
+        self.assertFalse(m[0])
+        del s
+
+        self.assertEqual(MyStorage.finalized_count, 0)
+        self.assertFalse(m[0])
+
+        s = a.untyped_storage()
+        del a
+        self.assertFalse(m[0])
+        self.assertEqual(MyStorage.finalized_count, 0)
+        self.assertTrue(isinstance(s, MyStorage))
+        del s
+        self.assertEqual(MyStorage.finalized_count, 1)
+        self.assertTrue(m[0])
+
     def test_tensor_slot_dealloc(self):
 
         class SlotTensor1(torch._C._TensorBase):
