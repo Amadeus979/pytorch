@@ -1160,6 +1160,7 @@ def get_fake_value(node, tx):
     def fake_wrapper(e):
         if isinstance(e, torch.Tensor):
             assert isinstance(e, FakeTensor)
+            return e.clone_preserve_strides_storage()
         return e
 
     def visit(n: torch.fx.Node):

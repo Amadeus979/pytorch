@@ -31,7 +31,7 @@ from ..utils import (
 from .base import VariableTracker
 from .lists import ListVariable, TupleVariable
 from .misc import AutocastModeVariable, NullContextVariable
-from .tensor import TensorWithTFOverrideVariable
+from .tensor import has_same_metadata, TensorWithTFOverrideVariable
 
 log = logging.getLogger(__name__)
 
@@ -590,6 +590,11 @@ For now, dynamo will explicitly graph break when it encounters user code with th
                 ),
                 **options,
             )
+            is_inplace_func = fn_.__name__[-1] == "_" or (
+                hasattr(fn_, "_name") and fn_._name[-1] == "_"
+            )
+            if is_inplace_func and not has_same_metadata(tensor_variable, args[0]):
+                tx.update_locals_and_stack_ex(args[0], tensor_variable)
 
             if "out" in kwargs and not (
                 isinstance(kwargs["out"], variables.ConstantVariable)

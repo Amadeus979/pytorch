@@ -513,6 +513,20 @@ class InstructionTranslatorBase(Checkpointable[InstructionTranslatorGraphState])
                 repl, x, cache, skip_fn=skip
             )
 
+    def update_locals_and_stack_ex(
+        self, oldvar: VariableTracker, newvar: VariableTracker
+    ):
+        def repl(v: VariableTracker):
+            if isinstance(v, TensorVariable) and v.proxy.node is oldvar.proxy.node:
+                return newvar
+            return v
+
+        cache: Dict[int, Tuple[object, object]] = dict()
+        self.output.side_effects.apply(repl, cache)
+        self.stack = [VariableTracker.apply(repl, x, cache) for x in self.stack]
+        for k, x in self.symbolic_locals.items():
+            self.symbolic_locals[k] = VariableTracker.apply(repl, x, cache)
+
     def replace_all(self, oldvar: VariableTracker, newvar: VariableTracker):
         if isinstance(oldvar.mutable_local, side_effects.MutableSideEffects):
             newvar = self.output.side_effects.mutation(oldvar, newvar)

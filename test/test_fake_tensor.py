@@ -499,6 +499,18 @@ class FakeTensorTest(TestCase):
         with patch.object(torch._functorch.config, "fake_tensor_allow_meta", False):
             self.assertRaises(Exception, run_meta)
 
+    def test_clone_preserve_strides_storage(self):
+        for requires_grad in [True, False]:
+            with FakeTensorMode():
+                x = torch.rand([4])
+                x.requires_grad = requires_grad
+                z = x.clone_preserve_strides_storage()
+
+            assert x.size() == z.size() and x.stride() == z.stride()
+            assert x.untyped_storage()._cdata == z.untyped_storage()._cdata
+            assert x.device == z.device and x.dtype == z.dtype
+            assert x.requires_grad == z.requires_grad
+
 
 class FakeTensorConstHandling(TestCase):
     def assertConst(self, *args):
