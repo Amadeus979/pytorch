@@ -283,6 +283,24 @@ class TestMakeFx(MultiThreadedTestCase):
             .check_not("get_attr")  \
             .check("wait_tensor").run(str(mesh_dim_graph.graph))
 
+    def test_all_reduce_tracing_wait(self):
+        def allred_alone_no_wait(input):
+            return ft_c.all_reduce(input, "sum", group=[0, 1])
+
+        graph = make_fx(allred_alone_no_wait)(torch.rand(4))
+        FileCheck()  \
+            .check("all_reduce")  \
+            .check("get_attr").run(str(graph.graph))
+
+        def allred_alone_with_wait(input):
+            return ft_c.all_reduce(input, "sum", group=[0, 1]).wait()
+
+        graph = make_fx(allred_alone_with_wait)(torch.rand(4))
+        FileCheck()  \
+            .check("all_reduce")  \
+            .check_not("get_attr")  \
+            .check("wait").run(str(graph.graph))
+
 
 if __name__ == "__main__":
     run_tests()
